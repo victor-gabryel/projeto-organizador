@@ -19,14 +19,10 @@ class Node:
         self.tamanho = tamanho
         self.acessos = 0
 
-        # árvore binária
         self.esq = None
         self.dir = None
-
-        # filhos (usado apenas se for diretório)
         self.filhos = None
 
-    # -------- SERIALIZAÇÃO --------
     def to_dict(self):
         return {
             "nome": self.nome,
@@ -42,7 +38,7 @@ class Node:
     def from_dict(d):
         if not d:
             return None
-        n = Node(d["nome"], d["tipo"], d["tamanho"])
+        n = Node(d["nome"], d["tipo"], d.get("tamanho", 0))
         n.acessos = d.get("acessos", 0)
         n.esq = Node.from_dict(d.get("esq"))
         n.dir = Node.from_dict(d.get("dir"))
@@ -55,11 +51,14 @@ class Node:
 # ------------------------------------------------------
 class SistemaArquivos:
     def __init__(self):
-        self.raiz = Node("/", "diretorio")
-        self.heap = []
-        self.undo = []
         self.arquivo = "sistema_arquivos.json"
-        self.carregar()
+        self.undo = []
+        self.heap = []
+
+        if os.path.exists(self.arquivo):
+            self.carregar()
+        else:
+            self.raiz = Node("/", "diretorio")
 
     # ---------------- BST ----------------
     def _inserir_bst(self, r, n):
@@ -83,20 +82,18 @@ class SistemaArquivos:
             return None, None
 
         if nome < r.nome:
-            r.esq, removido = self._excluir_bst(r.esq, nome)
-            return r, removido
+            r.esq, rem = self._excluir_bst(r.esq, nome)
+            return r, rem
 
         if nome > r.nome:
-            r.dir, removido = self._excluir_bst(r.dir, nome)
-            return r, removido
+            r.dir, rem = self._excluir_bst(r.dir, nome)
+            return r, rem
 
-        # nó encontrado
         if not r.esq:
             return r.dir, r
         if not r.dir:
             return r.esq, r
 
-        # dois filhos
         m = r.dir
         while m.esq:
             m = m.esq
@@ -122,15 +119,12 @@ class SistemaArquivos:
     # ---------------- CRIAR ----------------
     def criar(self, caminho, nome, tipo, tamanho=0):
         pai = self._navegar(caminho)
-        if not pai:
+        if not pai or self._buscar_bst(pai.filhos, nome):
             return False
 
-        if self._buscar_bst(pai.filhos, nome):
-            return False
-
-        novo = Node(nome, tipo, tamanho)
-        pai.filhos = self._inserir_bst(pai.filhos, novo)
-        self.undo.append(("excluir", caminho, nome))
+        node = Node(nome, tipo, tamanho)
+        pai.filhos = self._inserir_bst(pai.filhos, node)
+        self.undo.append(("criar", caminho, nome))
         self.salvar()
         return True
 
@@ -140,18 +134,22 @@ class SistemaArquivos:
         if not pai:
             return False
 
-        pai.filhos, removido = self._excluir_bst(pai.filhos, nome)
-        if not removido:
+        pai.filhos, node = self._excluir_bst(pai.filhos, nome)
+        if not node:
             return False
 
-        self.undo.append(("criar", caminho, removido))
+        self.undo.append(("excluir", caminho, node))
         self.salvar()
         return True
 
     # ---------------- RENOMEAR ----------------
     def renomear(self, caminho, antigo, novo):
+        # bloqueia renomear raiz
+        if caminho == "/" and antigo == "/":
+            return False
+
         pai = self._navegar(caminho)
-        if not pai:
+        if not pai or self._buscar_bst(pai.filhos, novo):
             return False
 
         pai.filhos, node = self._excluir_bst(pai.filhos, antigo)
@@ -166,16 +164,16 @@ class SistemaArquivos:
 
     # ---------------- MOVER ----------------
     def mover(self, origem, nome, destino):
-        pai_origem = self._navegar(origem)
-        pai_destino = self._navegar(destino)
-        if not pai_origem or not pai_destino:
+        po = self._navegar(origem)
+        pd = self._navegar(destino)
+        if not po or not pd:
             return False
 
-        pai_origem.filhos, node = self._excluir_bst(pai_origem.filhos, nome)
+        po.filhos, node = self._excluir_bst(po.filhos, nome)
         if not node:
             return False
 
-        pai_destino.filhos = self._inserir_bst(pai_destino.filhos, node)
+        pd.filhos = self._inserir_bst(pd.filhos, node)
         self.undo.append(("mover", destino, nome, origem))
         self.salvar()
         return True
@@ -186,27 +184,25 @@ class SistemaArquivos:
         if not pai:
             return False
 
-        n = self._buscar_bst(pai.filhos, nome)
-        if not n:
+        node = self._buscar_bst(pai.filhos, nome)
+        if not node:
             return False
 
-        n.acessos += 1
-        heapq.heappush(self.heap, (-n.acessos, -n.tamanho, n.nome, n.tipo))
+        node.acessos += 1
+        heapq.heappush(self.heap, (-node.acessos, -node.tamanho, node.nome, node.tipo))
         self.salvar()
         return True
 
     # ---------------- SUGESTÕES ----------------
     def sugeridos(self, qtd=5):
-        vistos = set()
-        res = []
-        temp = []
+        vistos, res, temp = set(), [], []
 
         while self.heap and len(res) < qtd:
-            a, t, nome, tipo = heapq.heappop(self.heap)
-            if nome not in vistos:
-                res.append((nome, tipo, -a, -t))
-                vistos.add(nome)
-            temp.append((a, t, nome, tipo))
+            a, t, n, tp = heapq.heappop(self.heap)
+            if n not in vistos:
+                res.append((n, tp, -a, -t))
+                vistos.add(n)
+            temp.append((a, t, n, tp))
 
         for x in temp:
             heapq.heappush(self.heap, x)
@@ -221,11 +217,11 @@ class SistemaArquivos:
         acao = self.undo.pop()
         tipo = acao[0]
 
-        if tipo == "excluir":
+        if tipo == "criar":
             _, caminho, nome = acao
             self.excluir(caminho, nome)
 
-        elif tipo == "criar":
+        elif tipo == "excluir":
             _, caminho, node = acao
             pai = self._navegar(caminho)
             pai.filhos = self._inserir_bst(pai.filhos, node)
@@ -241,41 +237,44 @@ class SistemaArquivos:
         self.salvar()
         return True
 
-    # ---------------- LISTAR TUDO (RECURSIVO) ----------------
+    # ---------------- LISTAR ----------------
     def listar(self, caminho):
         pai = self._navegar(caminho)
         if not pai:
             return []
 
         res = []
-        self._listar_recursivo(pai.filhos, caminho.rstrip("/"), res)
+        self._listar_rec(pai.filhos, caminho.rstrip("/"), res)
         return res
 
-    def _listar_recursivo(self, node, caminho_atual, res):
+    def _listar_rec(self, node, caminho, res):
         if not node:
             return
+        self._listar_rec(node.esq, caminho, res)
 
-        self._listar_recursivo(node.esq, caminho_atual, res)
+        atual = f"{caminho}/{node.nome}".replace("//", "/")
+        res.append((atual, node.tipo))
 
-        caminho_completo = f"{caminho_atual}/{node.nome}".replace("//", "/")
-        res.append((caminho_completo, node.tipo))
+        if node.tipo == "diretorio":
+            self._listar_rec(node.filhos, atual, res)
 
-        if node.tipo == "diretorio" and node.filhos:
-            self._listar_recursivo(node.filhos, caminho_completo, res)
-
-        self._listar_recursivo(node.dir, caminho_atual, res)
+        self._listar_rec(node.dir, caminho, res)
 
     # ---------------- SALVAR / CARREGAR ----------------
     def salvar(self):
         with open(self.arquivo, "w", encoding="utf-8") as f:
-            json.dump({"raiz": self.raiz.to_dict(), "heap": self.heap}, f, indent=4)
+            json.dump(
+                {"raiz": self.raiz.to_dict(), "heap": self.heap},
+                f,
+                indent=4,
+                ensure_ascii=False
+            )
 
     def carregar(self):
-        if os.path.exists(self.arquivo):
-            with open(self.arquivo, "r", encoding="utf-8") as f:
-                d = json.load(f)
-            self.raiz = Node.from_dict(d.get("raiz"))
-            self.heap = d.get("heap", [])
+        with open(self.arquivo, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        self.raiz = Node.from_dict(d["raiz"])
+        self.heap = d.get("heap", [])
 
 
 # ------------------------------------------------------
@@ -290,8 +289,10 @@ def escolher_item(s, caminho):
     for i, (n, t) in enumerate(itens, 1):
         print(f"{i} - {n} ({t})")
 
-    op = int(input("Escolha: ")) - 1
-    return itens[op][0].split("/")[-1]
+    try:
+        return itens[int(input("Escolha: ")) - 1][0].split("/")[-1]
+    except:
+        return None
 
 
 def main():
@@ -300,85 +301,69 @@ def main():
     while True:
         print("""
 ===== ORGANIZADOR DE ARQUIVOS =====
-1 - Criar arquivo/diretório
+1 - Criar
 2 - Excluir
 3 - Renomear
 4 - Mover
 5 - Acessar
 6 - Sugeridos
 7 - Desfazer
-8 - Listar tudo
+8 - Listar
 0 - Sair
 ==================================
 """)
 
         op = input("Opção: ")
 
+        if op == "0":
+            break
+
         try:
             if op == "1":
-                caminho = input("Caminho: ")
-                nome = input("Nome: ")
-                print("1 - Arquivo | 2 - Diretório")
-                t = input("Tipo: ")
-
-                if t == "1":
-                    tamanho = int(input("Tamanho: "))
-                    print("Criado!" if s.criar(caminho, nome, "arquivo", tamanho) else "Erro.")
-                else:
-                    print("Criado!" if s.criar(caminho, nome, "diretorio") else "Erro.")
-                pausa()
+                c = input("Caminho: ")
+                n = input("Nome: ")
+                t = input("1-Arquivo | 2-Diretório: ")
+                tam = int(input("Tamanho: ")) if t == "1" else 0
+                print("OK" if s.criar(c, n, "arquivo" if t == "1" else "diretorio", tam) else "Erro")
 
             elif op == "2":
-                caminho = input("Caminho: ")
-                nome = escolher_item(s, caminho)
-                if nome:
-                    print("Excluído!" if s.excluir(caminho, nome) else "Erro.")
-                pausa()
+                c = input("Caminho: ")
+                n = escolher_item(s, c)
+                print("OK" if n and s.excluir(c, n) else "Erro")
 
             elif op == "3":
-                caminho = input("Caminho: ")
-                antigo = escolher_item(s, caminho)
-                if antigo:
-                    novo = input("Novo nome: ")
-                    print("Renomeado!" if s.renomear(caminho, antigo, novo) else "Erro.")
-                pausa()
+                c = input("Caminho: ")
+                n = escolher_item(s, c)
+                novo = input("Novo nome: ")
+                print("OK" if n and s.renomear(c, n, novo) else "Erro")
 
             elif op == "4":
-                origem = input("Origem: ")
-                nome = escolher_item(s, origem)
-                if nome:
-                    destino = input("Destino: ")
-                    print("Movido!" if s.mover(origem, nome, destino) else "Erro.")
-                pausa()
+                o = input("Origem: ")
+                n = escolher_item(s, o)
+                d = input("Destino: ")
+                print("OK" if n and s.mover(o, n, d) else "Erro")
 
             elif op == "5":
-                caminho = input("Caminho: ")
-                nome = escolher_item(s, caminho)
-                if nome:
-                    print("Acessado!" if s.acessar(caminho, nome) else "Erro.")
-                pausa()
+                c = input("Caminho: ")
+                n = escolher_item(s, c)
+                print("OK" if n and s.acessar(c, n) else "Erro")
 
             elif op == "6":
                 for n, t, a, tam in s.sugeridos():
-                    print(f"{n} ({t}) - {a} acessos - {tam} tamanho")
-                pausa()
+                    print(f"{n} ({t}) - {a} acessos - {tam}")
 
             elif op == "7":
-                print("Desfeito!" if s.desfazer() else "Nada para desfazer.")
-                pausa()
+                print("OK" if s.desfazer() else "Nada a desfazer")
 
             elif op == "8":
-                caminho = input("Caminho: ")
-                for n, t in s.listar(caminho):
+                c = input("Caminho: ")
+                for n, t in s.listar(c):
                     print(f"{n} ({t})")
-                pausa()
 
-            elif op == "0":
-                break
+        except Exception as e:
+            print("Erro crítico:", e)
 
-        except Exception:
-            print("Erro na operação.")
-            pausa()
+        pausa()
 
 
 if __name__ == "__main__":
