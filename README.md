@@ -134,8 +134,102 @@ python main.py
 
 ---
 
-## 📌 Observações Finais
+## Observações Finais
 
 Este projeto demonstra, de forma prática e integrada, a aplicação de **árvores binárias, heaps e pilhas**, reforçando conceitos fundamentais da disciplina de **Estrutura de Dados**.
 
-Trata-se de um sistema **didático, funcional e alinhado aos objetivos acadêmicos** do curso.
+---
+
+## Funcionamento do Código e Funções Principais
+
+### Classe `Node`
+
+A classe `Node` representa cada arquivo ou diretório do sistema.
+
+Ela armazena:
+
+* Nome
+* Tipo (arquivo ou diretório)
+* Tamanho
+* Quantidade de acessos
+* Ponteiros da árvore (`esq` e `dir`)
+* Ponteiro para filhos, no caso de diretórios
+
+---
+
+### Função `criar()`
+
+Responsável por criar arquivos ou diretórios.
+
+Funções principais:
+
+* Navega até o caminho informado
+* Verifica se o nome já existe
+* Insere o novo nó na árvore binária
+* Salva a ação para permitir desfazer
+
+---
+
+### Função `excluir()`
+
+Remove um arquivo ou diretório da árvore.
+
+Funções principais:
+
+* Localiza o item
+* Remove o nó da BST
+* Armazena a ação na pilha de undo
+
+---
+
+### Função `renomear()`
+
+Altera o nome de um arquivo ou diretório.
+
+Funcionamento:
+
+* Remove o nó da árvore
+* Atualiza o nome
+* Reinsere o nó para manter a ordenação
+* O diretório raiz (`/`) não pode ser renomeado
+
+---
+
+### Função `mover()`
+
+Transfere um arquivo ou diretório de um caminho para outro.
+
+Funcionamento:
+
+* Remove o item do diretório de origem
+* Insere o item no diretório de destino
+
+---
+
+### Função `acessar()`
+
+Registra o acesso a um arquivo ou diretório.
+
+Funcionamento:
+
+* Incrementa o contador de acessos
+* Atualiza o heap de prioridades
+
+---
+
+### Função `listar()`
+
+Lista arquivos e diretórios de forma ordenada e recursiva.
+
+Funcionamento:
+
+* Percorre a árvore utilizando o percurso *in-order*
+* Garante a exibição em ordem alfabética
+
+---
+
+## 🏁 Conclusão
+
+O projeto **Organizador de Arquivos e Documentos**, desenvolvido por **Victor Gabryel da Silva** e **Emanuel Bento da Silva**, demonstra na prática a aplicação de estruturas de dados para resolver um problema real.
+
+O sistema integra **árvores binárias, heaps, pilhas e persistência de dados**, atendendo plenamente aos objetivos da disciplina de **Estrutura de Dados**.
