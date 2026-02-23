@@ -228,7 +228,7 @@ Funcionamento:
 
 ---
 
-## 🏁 Conclusão
+## Conclusão
 
 O projeto **Organizador de Arquivos e Documentos**, desenvolvido por **Victor Gabryel da Silva** e **Emanuel Bento da Silva**, demonstra na prática a aplicação de estruturas de dados para resolver um problema real.
 
